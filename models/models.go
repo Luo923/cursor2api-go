@@ -225,7 +225,8 @@ func ToCursorMessages(messages []Message, systemPromptInject string) []CursorMes
 		}
 		messages = messages[1:]
 	}
-	if systemPromptInject = strings.TrimSpace(systemPromptInject); systemPromptInject != "" {
+	systemPromptInject = strings.TrimSpace(systemPromptInject)
+	if systemPromptInject != "" {
 		systemParts = append(systemParts, systemPromptInject)
 	}
 	if len(systemParts) > 0 {
