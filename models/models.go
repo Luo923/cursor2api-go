@@ -240,13 +240,8 @@ func ToCursorMessages(messages []Message, systemPromptInject string) []CursorMes
 			continue
 		}
 
-		role := msg.Role
-		if role != "user" {
-			role = "user"
-		}
-
 		normalizedMessages = append(normalizedMessages, Message{
-			Role:    role,
+			Role:    "user",
 			Content: msg.GetStringContent(),
 		})
 	}
