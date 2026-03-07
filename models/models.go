@@ -232,7 +232,7 @@ func ToCursorMessages(messages []Message, systemPromptInject string) []CursorMes
 	if len(systemParts) > 0 {
 		normalizedMessages = append(normalizedMessages, Message{
 			Role:    "user",
-			Content: strings.Join(systemParts, "\n"),
+			Content: strings.Join(systemParts, "\n\n"),
 		})
 	}
 

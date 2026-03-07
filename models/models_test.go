@@ -104,7 +104,7 @@ func TestToCursorMessages(t *testing.T) {
 			systemPrompt:      "You are an AI",
 			expectedLength:    1,
 			expectedFirstRole: "user",
-			expectedFirstMsg:  "Be helpful\nYou are an AI\n\nHello",
+			expectedFirstMsg:  "Be helpful\n\nYou are an AI\n\nHello",
 		},
 		{
 			name: "leading assistant message is merged into first user message",
