@@ -240,19 +240,20 @@ func ToCursorMessages(messages []Message, systemPromptInject string) []CursorMes
 		if msg.Role == "" {
 			continue
 		}
+		content := strings.TrimSpace(msg.GetStringContent())
+		if content == "" {
+			continue
+		}
 
 		normalizedMessages = append(normalizedMessages, Message{
 			Role:    "user",
-			Content: msg.GetStringContent(),
+			Content: content,
 		})
 	}
 
 	// 合并连续相同角色的消息，避免因连续同角色消息导致的错误
 	var mergedMessages []Message
 	for _, msg := range normalizedMessages {
-		if msg.Role == "" {
-			continue
-		}
 		if len(mergedMessages) > 0 && mergedMessages[len(mergedMessages)-1].Role == msg.Role {
 			// 合并为字符串内容，供后续转换为CursorPart使用
 			merged := mergedMessages[len(mergedMessages)-1].GetStringContent() + "\n\n" + msg.GetStringContent()
