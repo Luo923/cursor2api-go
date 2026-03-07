@@ -102,6 +102,37 @@ func TestToCursorMessages(t *testing.T) {
 			expectedLength:   2,
 			expectedFirstMsg: "Be helpful\nYou are an AI",
 		},
+		{
+			name: "leading assistant message is dropped",
+			messages: []Message{
+				{Role: "assistant", Content: "Hi there"},
+				{Role: "user", Content: "Hello"},
+			},
+			systemPrompt:     "",
+			expectedLength:   1,
+			expectedFirstMsg: "Hello",
+		},
+		{
+			name: "consecutive user messages are merged",
+			messages: []Message{
+				{Role: "user", Content: "First"},
+				{Role: "user", Content: "Second"},
+			},
+			systemPrompt:     "",
+			expectedLength:   1,
+			expectedFirstMsg: "First\n\nSecond",
+		},
+		{
+			name: "system then leading assistant then user",
+			messages: []Message{
+				{Role: "system", Content: "Be helpful"},
+				{Role: "assistant", Content: "Hi"},
+				{Role: "user", Content: "Hello"},
+			},
+			systemPrompt:     "",
+			expectedLength:   2,
+			expectedFirstMsg: "Be helpful",
+		},
 	}
 
 	for _, tt := range tests {

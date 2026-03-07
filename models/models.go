@@ -248,12 +248,30 @@ func ToCursorMessages(messages []Message, systemPromptInject string) []CursorMes
 		messages = messages[1:] // 跳过第一条消息
 	}
 
-	// 转换其余消息
+	// Cursor要求对话必须以user消息开始，跳过开头的非user消息
+	startIdx := 0
+	for startIdx < len(messages) && messages[startIdx].Role != "user" {
+		startIdx++
+	}
+	messages = messages[startIdx:]
+
+	// 合并连续相同角色的消息，避免因连续同角色消息导致的错误
+	var mergedMessages []Message
 	for _, msg := range messages {
 		if msg.Role == "" {
-			continue // 跳过空消息
+			continue
 		}
+		if len(mergedMessages) > 0 && mergedMessages[len(mergedMessages)-1].Role == msg.Role {
+			// 合并为字符串内容，供后续转换为CursorPart使用
+			merged := mergedMessages[len(mergedMessages)-1].GetStringContent() + "\n\n" + msg.GetStringContent()
+			mergedMessages[len(mergedMessages)-1].Content = merged
+		} else {
+			mergedMessages = append(mergedMessages, msg)
+		}
+	}
 
+	// 转换其余消息
+	for _, msg := range mergedMessages {
 		cursorMsg := CursorMessage{
 			Role: msg.Role,
 			Parts: []CursorPart{
