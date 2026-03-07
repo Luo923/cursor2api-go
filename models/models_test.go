@@ -68,29 +68,32 @@ func TestGetStringContent(t *testing.T) {
 
 func TestToCursorMessages(t *testing.T) {
 	tests := []struct {
-		name             string
-		messages         []Message
-		systemPrompt     string
-		expectedLength   int
-		expectedFirstMsg string
+		name              string
+		messages          []Message
+		systemPrompt      string
+		expectedLength    int
+		expectedFirstRole string
+		expectedFirstMsg  string
 	}{
 		{
 			name: "no system prompt",
 			messages: []Message{
 				{Role: "user", Content: "Hello"},
 			},
-			systemPrompt:     "",
-			expectedLength:   1,
-			expectedFirstMsg: "Hello",
+			systemPrompt:      "",
+			expectedLength:    1,
+			expectedFirstRole: "user",
+			expectedFirstMsg:  "Hello",
 		},
 		{
 			name: "with system prompt, no system message",
 			messages: []Message{
 				{Role: "user", Content: "Hello"},
 			},
-			systemPrompt:     "You are a helpful assistant",
-			expectedLength:   2,
-			expectedFirstMsg: "You are a helpful assistant",
+			systemPrompt:      "You are a helpful assistant",
+			expectedLength:    1,
+			expectedFirstRole: "user",
+			expectedFirstMsg:  "You are a helpful assistant\n\nHello",
 		},
 		{
 			name: "with system prompt, has system message",
@@ -98,9 +101,10 @@ func TestToCursorMessages(t *testing.T) {
 				{Role: "system", Content: "Be helpful"},
 				{Role: "user", Content: "Hello"},
 			},
-			systemPrompt:     "You are an AI",
-			expectedLength:   2,
-			expectedFirstMsg: "Be helpful\nYou are an AI",
+			systemPrompt:      "You are an AI",
+			expectedLength:    1,
+			expectedFirstRole: "user",
+			expectedFirstMsg:  "Be helpful\n\nYou are an AI\n\nHello",
 		},
 		{
 			name: "leading assistant message is merged into first user message",
@@ -108,9 +112,10 @@ func TestToCursorMessages(t *testing.T) {
 				{Role: "assistant", Content: "Hi there"},
 				{Role: "user", Content: "Hello"},
 			},
-			systemPrompt:     "",
-			expectedLength:   1,
-			expectedFirstMsg: "Hi there\n\nHello",
+			systemPrompt:      "",
+			expectedLength:    1,
+			expectedFirstRole: "user",
+			expectedFirstMsg:  "Hi there\n\nHello",
 		},
 		{
 			name: "consecutive user messages are merged",
@@ -118,20 +123,22 @@ func TestToCursorMessages(t *testing.T) {
 				{Role: "user", Content: "First"},
 				{Role: "user", Content: "Second"},
 			},
-			systemPrompt:     "",
-			expectedLength:   1,
-			expectedFirstMsg: "First\n\nSecond",
+			systemPrompt:      "",
+			expectedLength:    1,
+			expectedFirstRole: "user",
+			expectedFirstMsg:  "First\n\nSecond",
 		},
 		{
-			name: "system then leading assistant then user - assistant merged into user",
+			name: "system then leading assistant then user - all normalized to user",
 			messages: []Message{
 				{Role: "system", Content: "Be helpful"},
 				{Role: "assistant", Content: "Hi"},
 				{Role: "user", Content: "Hello"},
 			},
-			systemPrompt:     "",
-			expectedLength:   2,
-			expectedFirstMsg: "Be helpful",
+			systemPrompt:      "",
+			expectedLength:    1,
+			expectedFirstRole: "user",
+			expectedFirstMsg:  "Be helpful\n\nHi\n\nHello",
 		},
 		{
 			name: "only non-user messages become a single user message",
@@ -139,9 +146,36 @@ func TestToCursorMessages(t *testing.T) {
 				{Role: "assistant", Content: "Hi"},
 				{Role: "assistant", Content: "There"},
 			},
-			systemPrompt:     "",
-			expectedLength:   1,
-			expectedFirstMsg: "Hi\n\nThere",
+			systemPrompt:      "",
+			expectedLength:    1,
+			expectedFirstRole: "user",
+			expectedFirstMsg:  "Hi\n\nThere",
+		},
+		{
+			name: "assistant replies later are also normalized to user",
+			messages: []Message{
+				{Role: "user", Content: "Question"},
+				{Role: "assistant", Content: "Answer"},
+				{Role: "user", Content: "Follow-up"},
+			},
+			systemPrompt:      "",
+			expectedLength:    1,
+			expectedFirstRole: "user",
+			expectedFirstMsg:  "Question\n\nAnswer\n\nFollow-up",
+		},
+		{
+			name: "alternating user and assistant turns collapse into one user message",
+			messages: []Message{
+				{Role: "user", Content: "U1"},
+				{Role: "assistant", Content: "A1"},
+				{Role: "user", Content: "U2"},
+				{Role: "assistant", Content: "A2"},
+				{Role: "user", Content: "U3"},
+			},
+			systemPrompt:      "",
+			expectedLength:    1,
+			expectedFirstRole: "user",
+			expectedFirstMsg:  "U1\n\nA1\n\nU2\n\nA2\n\nU3",
 		},
 	}
 
@@ -151,6 +185,9 @@ func TestToCursorMessages(t *testing.T) {
 			if len(result) != tt.expectedLength {
 				t.Errorf("ToCursorMessages() length = %v, want %v", len(result), tt.expectedLength)
 			}
+			if len(result) > 0 && result[0].Role != tt.expectedFirstRole {
+				t.Errorf("ToCursorMessages() first role = %v, want %v", result[0].Role, tt.expectedFirstRole)
+			}
 			if len(result) > 0 && result[0].Parts[0].Text != tt.expectedFirstMsg {
 				t.Errorf("ToCursorMessages() first message = %v, want %v", result[0].Parts[0].Text, tt.expectedFirstMsg)
 			}
@@ -158,28 +195,24 @@ func TestToCursorMessages(t *testing.T) {
 	}
 }
 
-func TestToCursorMessagesLeadingNonUserMerged(t *testing.T) {
-	// Verify that the assistant message is merged into the user message when
-	// a system message precedes them.
+func TestToCursorMessagesAllOutboundRolesBecomeUser(t *testing.T) {
 	messages := []Message{
 		{Role: "system", Content: "Be helpful"},
 		{Role: "assistant", Content: "Hi"},
 		{Role: "user", Content: "Hello"},
+		{Role: "assistant", Content: "How can I help?"},
 	}
 	result := ToCursorMessages(messages, "")
 
-	if len(result) != 2 {
-		t.Fatalf("expected 2 messages, got %d", len(result))
+	if len(result) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(result))
 	}
-	if result[0].Role != "system" {
-		t.Errorf("expected first message role=system, got %q", result[0].Role)
+	if result[0].Role != "user" {
+		t.Fatalf("expected first message role=user, got %q", result[0].Role)
 	}
-	if result[1].Role != "user" {
-		t.Errorf("expected second message role=user, got %q", result[1].Role)
-	}
-	const wantSecond = "Hi\n\nHello"
-	if result[1].Parts[0].Text != wantSecond {
-		t.Errorf("expected second message text %q, got %q", wantSecond, result[1].Parts[0].Text)
+	const want = "Be helpful\n\nHi\n\nHello\n\nHow can I help?"
+	if result[0].Parts[0].Text != want {
+		t.Errorf("expected merged message text %q, got %q", want, result[0].Parts[0].Text)
 	}
 }
 

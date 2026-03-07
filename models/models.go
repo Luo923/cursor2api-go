@@ -215,69 +215,45 @@ func (m *Message) GetStringContent() string {
 // ToCursorMessages 将OpenAI消息转换为Cursor格式
 func ToCursorMessages(messages []Message, systemPromptInject string) []CursorMessage {
 	var result []CursorMessage
+	var normalizedMessages []Message
+	var systemParts []string
 
-	// 处理系统提示注入
+	// Cursor 当前协议要求以 user 消息发送对话，因此将系统提示也折叠为 user 消息内容。
+	if len(messages) > 0 && messages[0].Role == "system" {
+		if content := strings.TrimSpace(messages[0].GetStringContent()); content != "" {
+			systemParts = append(systemParts, content)
+		}
+		messages = messages[1:]
+	}
+	systemPromptInject = strings.TrimSpace(systemPromptInject)
 	if systemPromptInject != "" {
-		if len(messages) > 0 && messages[0].Role == "system" {
-			// 如果第一条已经是系统消息，追加注入内容
-			content := messages[0].GetStringContent()
-			content += "\n" + systemPromptInject
-			result = append(result, CursorMessage{
-				Role: "system",
-				Parts: []CursorPart{
-					{Type: "text", Text: content},
-				},
-			})
-			messages = messages[1:] // 跳过第一条消息
-		} else {
-			// 如果第一条不是系统消息或没有消息，插入新的系统消息
-			result = append(result, CursorMessage{
-				Role: "system",
-				Parts: []CursorPart{
-					{Type: "text", Text: systemPromptInject},
-				},
-			})
-		}
-	} else if len(messages) > 0 && messages[0].Role == "system" {
-		// 如果有系统消息但没有注入内容，直接添加
-		result = append(result, CursorMessage{
-			Role: "system",
-			Parts: []CursorPart{
-				{Type: "text", Text: messages[0].GetStringContent()},
-			},
+		systemParts = append(systemParts, systemPromptInject)
+	}
+	if len(systemParts) > 0 {
+		normalizedMessages = append(normalizedMessages, Message{
+			Role:    "user",
+			Content: strings.Join(systemParts, "\n\n"),
 		})
-		messages = messages[1:] // 跳过第一条消息
 	}
 
-	// Cursor要求对话必须以user消息开始。
-	// 将开头所有非user消息的内容合并到第一条user消息中，作为新的user消息。
-	var leadingParts []string
-	startIdx := 0
-	for startIdx < len(messages) && messages[startIdx].Role != "user" {
-		if content := strings.TrimSpace(messages[startIdx].GetStringContent()); content != "" {
-			leadingParts = append(leadingParts, content)
-		}
-		startIdx++
-	}
-	if len(leadingParts) > 0 {
-		if startIdx < len(messages) {
-			// 将前置内容拼接到第一条user消息之前
-			merged := strings.Join(leadingParts, "\n\n") + "\n\n" + messages[startIdx].GetStringContent()
-			messages = append([]Message{{Role: "user", Content: merged}}, messages[startIdx+1:]...)
-		} else {
-			// 没有user消息，将所有前置内容作为一条新的user消息
-			messages = []Message{{Role: "user", Content: strings.Join(leadingParts, "\n\n")}}
-		}
-	} else {
-		messages = messages[startIdx:]
-	}
-
-	// 合并连续相同角色的消息，避免因连续同角色消息导致的错误
-	var mergedMessages []Message
 	for _, msg := range messages {
 		if msg.Role == "" {
 			continue
 		}
+		content := strings.TrimSpace(msg.GetStringContent())
+		if content == "" {
+			continue
+		}
+
+		normalizedMessages = append(normalizedMessages, Message{
+			Role:    "user",
+			Content: content,
+		})
+	}
+
+	// 合并连续相同角色的消息，避免因连续同角色消息导致的错误
+	var mergedMessages []Message
+	for _, msg := range normalizedMessages {
 		if len(mergedMessages) > 0 && mergedMessages[len(mergedMessages)-1].Role == msg.Role {
 			// 合并为字符串内容，供后续转换为CursorPart使用
 			merged := mergedMessages[len(mergedMessages)-1].GetStringContent() + "\n\n" + msg.GetStringContent()
