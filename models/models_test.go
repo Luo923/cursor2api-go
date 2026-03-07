@@ -102,6 +102,47 @@ func TestToCursorMessages(t *testing.T) {
 			expectedLength:   2,
 			expectedFirstMsg: "Be helpful\nYou are an AI",
 		},
+		{
+			name: "leading assistant message is merged into first user message",
+			messages: []Message{
+				{Role: "assistant", Content: "Hi there"},
+				{Role: "user", Content: "Hello"},
+			},
+			systemPrompt:     "",
+			expectedLength:   1,
+			expectedFirstMsg: "Hi there\n\nHello",
+		},
+		{
+			name: "consecutive user messages are merged",
+			messages: []Message{
+				{Role: "user", Content: "First"},
+				{Role: "user", Content: "Second"},
+			},
+			systemPrompt:     "",
+			expectedLength:   1,
+			expectedFirstMsg: "First\n\nSecond",
+		},
+		{
+			name: "system then leading assistant then user - assistant merged into user",
+			messages: []Message{
+				{Role: "system", Content: "Be helpful"},
+				{Role: "assistant", Content: "Hi"},
+				{Role: "user", Content: "Hello"},
+			},
+			systemPrompt:     "",
+			expectedLength:   2,
+			expectedFirstMsg: "Be helpful",
+		},
+		{
+			name: "only non-user messages become a single user message",
+			messages: []Message{
+				{Role: "assistant", Content: "Hi"},
+				{Role: "assistant", Content: "There"},
+			},
+			systemPrompt:     "",
+			expectedLength:   1,
+			expectedFirstMsg: "Hi\n\nThere",
+		},
 	}
 
 	for _, tt := range tests {
@@ -114,6 +155,31 @@ func TestToCursorMessages(t *testing.T) {
 				t.Errorf("ToCursorMessages() first message = %v, want %v", result[0].Parts[0].Text, tt.expectedFirstMsg)
 			}
 		})
+	}
+}
+
+func TestToCursorMessagesLeadingNonUserMerged(t *testing.T) {
+	// Verify that the assistant message is merged into the user message when
+	// a system message precedes them.
+	messages := []Message{
+		{Role: "system", Content: "Be helpful"},
+		{Role: "assistant", Content: "Hi"},
+		{Role: "user", Content: "Hello"},
+	}
+	result := ToCursorMessages(messages, "")
+
+	if len(result) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(result))
+	}
+	if result[0].Role != "system" {
+		t.Errorf("expected first message role=system, got %q", result[0].Role)
+	}
+	if result[1].Role != "user" {
+		t.Errorf("expected second message role=user, got %q", result[1].Role)
+	}
+	const wantSecond = "Hi\n\nHello"
+	if result[1].Parts[0].Text != wantSecond {
+		t.Errorf("expected second message text %q, got %q", wantSecond, result[1].Parts[0].Text)
 	}
 }
 
