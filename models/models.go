@@ -22,6 +22,7 @@ package models
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 )
 
@@ -248,12 +249,28 @@ func ToCursorMessages(messages []Message, systemPromptInject string) []CursorMes
 		messages = messages[1:] // 跳过第一条消息
 	}
 
-	// Cursor要求对话必须以user消息开始，跳过开头的非user消息
+	// Cursor要求对话必须以user消息开始。
+	// 将开头所有非user消息的内容合并到第一条user消息中，作为新的user消息。
+	var leadingParts []string
 	startIdx := 0
 	for startIdx < len(messages) && messages[startIdx].Role != "user" {
+		if content := strings.TrimSpace(messages[startIdx].GetStringContent()); content != "" {
+			leadingParts = append(leadingParts, content)
+		}
 		startIdx++
 	}
-	messages = messages[startIdx:]
+	if len(leadingParts) > 0 {
+		if startIdx < len(messages) {
+			// 将前置内容拼接到第一条user消息之前
+			merged := strings.Join(leadingParts, "\n\n") + "\n\n" + messages[startIdx].GetStringContent()
+			messages = append([]Message{{Role: "user", Content: merged}}, messages[startIdx+1:]...)
+		} else {
+			// 没有user消息，将所有前置内容作为一条新的user消息
+			messages = []Message{{Role: "user", Content: strings.Join(leadingParts, "\n\n")}}
+		}
+	} else {
+		messages = messages[startIdx:]
+	}
 
 	// 合并连续相同角色的消息，避免因连续同角色消息导致的错误
 	var mergedMessages []Message
